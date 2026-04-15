@@ -1,86 +1,36 @@
-export default async (req) => {
-  if (req.method !== 'POST') {
-    return new Response('Method not allowed', { status: 405 });
+exports.handler = async function(event, context) {
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method not allowed' };
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY || Netlify.env.get('ANTHROPIC_API_KEY');
+  const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: 'API key not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
+    return { statusCode: 500, body: JSON.stringify({ error: 'No API key' }) };
   }
 
-  let body;
-  try {
-    body = await req.json();
-  } catch {
-    return new Response(JSON.stringify({ error: 'Invalid request body' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
+  const { prompt, schema } = JSON.parse(event.body);
 
-  const { prompt, schema } = body;
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01'
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 4000,
+      messages: [{ role: 'user', content: `${prompt}\n\nRespond with only a JSON object matching this schema:\n${JSON.stringify(schema)}` }]
+    })
+  });
 
-  const systemPrompt = `You are a JSON-only response API. You must respond with valid JSON that matches the provided schema exactly. Do not include any text outside the JSON object. Do not use markdown code blocks.`;
-
-  const userMessage = `${prompt}
-
-Respond with a JSON object matching this schema:
-${JSON.stringify(schema, null, 2)}
-
-Return only the JSON object, nothing else.`;
-
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 4000,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userMessage }]
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      return new Response(JSON.stringify({ error: `Anthropic API error: ${errorText}` }), {
-        status: response.status,
-        headers: { 'Content-Type': 'application/json' }
-      });
-    }
-
-    const data = await response.json();
-    const text = data.content[0].text.trim();
-
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      // Try stripping markdown fences if present
-      const clean = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
-      parsed = JSON.parse(clean);
-    }
-
-    return new Response(JSON.stringify(parsed), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json' }
-    });
-
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-};
-
-export const config = {
-  path: '/api/generate'
+  const data = await response.json();
+  const text = data.content[0].text.trim();
+  const clean = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+  
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: clean
+  };
 };
