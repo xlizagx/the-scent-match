@@ -25,7 +25,6 @@ exports.handler = async function(event, context) {
   });
 
   const data = await response.json();
-
 if (!response.ok) {
   return {
     statusCode: response.status,
