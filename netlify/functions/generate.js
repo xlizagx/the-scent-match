@@ -1,14 +1,12 @@
-exports.handler = async function(event, context) {
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method not allowed' };
+export default async (req) => {
+  if (req.method !== 'POST') {
+    return new Response('Method not allowed', { status: 405 });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'No API key' }) };
-  }
 
-  const { prompt, schema } = JSON.parse(event.body);
+  const body = await req.json();
+  const { prompt, schema } = body;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -27,10 +25,13 @@ exports.handler = async function(event, context) {
   const data = await response.json();
   const text = data.content[0].text.trim();
   const clean = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
-  
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
-    body: clean
-  };
+
+  return new Response(clean, {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' }
+  });
+};
+
+export const config = {
+  path: '/api/generate'
 };
