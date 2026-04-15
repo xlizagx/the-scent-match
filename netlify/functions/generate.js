@@ -25,7 +25,22 @@ exports.handler = async function(event, context) {
   });
 
   const data = await response.json();
-  const text = data.content[0].text.trim();
+
+if (!response.ok) {
+  return {
+    statusCode: response.status,
+    body: JSON.stringify(data)
+  };
+}
+
+const text = data.content?.[0]?.text?.trim();
+
+if (!text) {
+  return {
+    statusCode: 500,
+    body: JSON.stringify({ error: "No content returned", data })
+  };
+}
   const clean = text.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
   
   return {
